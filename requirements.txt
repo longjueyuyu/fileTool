@@ -1,0 +1,6 @@
+# 局域网文件共享工具依赖
+flask>=3.0.0
+customtkinter>=5.2.0
+Pillow>=10.0.0
+waitress>=3.0.0
+qrcode>=7.4.2

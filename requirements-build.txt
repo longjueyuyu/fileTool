@@ -1,0 +1,2 @@
+# 仅打包 exe 时需要：pip install -r requirements-build.txt
+pyinstaller>=6.0.0
