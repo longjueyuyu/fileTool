@@ -8,6 +8,12 @@
 - **扫码访问**：启动成功后自动生成二维码，局域网手机可直接扫码打开访问地址。
 - **网页端**：类似 nginx 目录列表，可浏览子目录、下载文件、上传到当前目录；图片/音视频/PDF 支持“预览”在浏览器中打开。
 - **中文路径**：从选择目录到 URL 编解码、读写文件，全程使用 UTF-8，避免 Windows 下中文乱码或访问失败。
+- **功能截图**：
+  1、启动设置界面
+  <img width="918" height="621" alt="image" src="https://github.com/user-attachments/assets/5d0ac42a-ede0-4569-965a-b5be1a730cf3" />
+  2、访问页面
+  <img width="1111" height="779" alt="image" src="https://github.com/user-attachments/assets/ebb0c2d6-44d3-4780-b152-c88d49724433" />
+
 
 ## 运行方式
 
