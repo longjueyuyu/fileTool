@@ -60,7 +60,7 @@ pyinstaller main.spec --noconfirm --clean
 ## 项目结构
 
 ```
-file_dir/
+fileTool/
 ├── main.py              # 入口：GUI + 子进程启动/停止服务
 ├── main.spec            # PyInstaller 打包配置
 ├── build_exe.bat        # 一键打包脚本
