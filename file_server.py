@@ -537,20 +537,77 @@ def text_preview(subpath):
 
 
 def get_local_ip():
-    """获取本机局域网 IP（非 127.0.0.1）。"""
+    """获取本机局域网 IP（优先返回 192.168/10/172 私网地址，避免 198.18 等虚拟网段）。"""
     import socket
+
+    candidates = []
+    # 1. 通过 UDP “拨号”方式获取首选出口 IP（可能是 VPN/虚拟网卡）
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.settimeout(0.5)
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
         s.close()
-        return ip
+        candidates.append(ip)
     except Exception:
-        try:
-            return socket.gethostbyname(socket.gethostname())
-        except Exception:
-            return "127.0.0.1"
+        pass
+
+    # 2. 枚举主机名解析出的所有 IPv4，补充候选
+    try:
+        infos = socket.getaddrinfo(socket.gethostname(), None, family=socket.AF_INET)
+        for _fam, _socktype, _proto, _canonname, sockaddr in infos:
+            ip = sockaddr[0]
+            if ip not in candidates:
+                candidates.append(ip)
+    except Exception:
+        pass
+
+    def _is_private(ip: str) -> bool:
+        parts = ip.split(".")
+        if len(parts) != 4:
+            return False
+        if ip.startswith("10."):
+            return True
+        if ip.startswith("192.168."):
+            return True
+        if ip.startswith("172."):
+            try:
+                second = int(parts[1])
+            except ValueError:
+                return False
+            return 16 <= second <= 31
+        return False
+
+    def _is_valid(ip: str) -> bool:
+        if ip.startswith("127."):
+            return False
+        if ip.startswith("169.254."):
+            return False
+        # 198.18/198.19 常用于测试/虚拟适配器，避免展示给用户
+        if ip.startswith("198.18.") or ip.startswith("198.19."):
+            return False
+        if ip.startswith("0.") or ip.startswith("255."):
+            return False
+        return True
+
+    # 3. 优先选择“私网 + 合法”的地址（如 192.168.2.x / 10.x / 172.16-31.x）
+    for ip in candidates:
+        if _is_private(ip) and _is_valid(ip):
+            return ip
+
+    # 4. 退而求其次：在候选中挑一个“合法但非回环/链路本地”的地址
+    for ip in candidates:
+        if _is_valid(ip):
+            return ip
+
+    # 5. 最后兜底：按主机名解析或返回 127.0.0.1
+    try:
+        ip = socket.gethostbyname(socket.gethostname())
+        if _is_valid(ip):
+            return ip
+    except Exception:
+        pass
+    return "127.0.0.1"
 
 
 def run_server(host: str, port: int, root_dir: str):
