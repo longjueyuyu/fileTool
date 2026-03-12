@@ -4,18 +4,25 @@
 提供指定目录的浏览、下载、上传，正确处理 Windows 中文路径。
 上传/下载使用大缓冲区流式传输，充分利用局域网带宽。
 """
+import json
 import logging
 import mimetypes
 import os
 import shutil
 import sys
 import threading
+import time
 import traceback
+from datetime import datetime
 from pathlib import Path
 from queue import Empty, Queue
 from urllib.parse import quote as url_quote, unquote
 from flask import Flask, request, Response, jsonify, abort
 from werkzeug.utils import secure_filename
+
+# SSE：有人上传/删除/新建后通知所有打开页面的客户端刷新列表
+_sse_lock = threading.Lock()
+_sse_queues = []  # 每个元素为 Queue，主线程 put 消息，SSE 生成器 get 后 yield
 
 logger = logging.getLogger("file_share")
 if not logger.handlers:
@@ -106,6 +113,81 @@ def _template_dir() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys._MEIPASS) / "templates"
     return Path(__file__).resolve().parent / "templates"
+
+
+def _rel_to_posix(rel: Path) -> str:
+    """Path('.') -> ''，其他 -> 'a/b'（用于前端 currentPath 对比）。"""
+    try:
+        if rel == Path(".") or str(rel) == ".":
+            return ""
+    except Exception:
+        pass
+    return rel.as_posix().replace("\\", "/").strip("/")
+
+
+def _notify_list_changed(event: dict):
+    """有人上传/删除/新建后调用，向所有订阅 SSE 的客户端推送事件。"""
+    if not isinstance(event, dict):
+        raise TypeError("event must be dict")
+    event.setdefault("type", "refresh")
+    msg = json.dumps(event, ensure_ascii=False)
+    with _sse_lock:
+        for q in _sse_queues:
+            try:
+                q.put_nowait(msg)
+            except Exception:
+                pass
+
+
+@app.route("/file/api/events")
+def sse_events():
+    """Server-Sent Events：客户端订阅后，在上传/删除/新建时收到刷新提醒。"""
+    def generate():
+        def _yield_sse_data(json_str: str):
+            """
+            Waitress 会按 send_bytes 缓冲小块输出；SSE 每条消息很小，可能永远达不到阈值。
+            这里把每条消息凑满 4KB（与 run_server 的 send_bytes=4096 对齐），确保及时发送。
+            """
+            msg = "data: %s\n\n" % json_str
+            need = 4096 - len(msg)
+            if need > 0:
+                # SSE 注释行（以 ':' 开头）会被客户端忽略，用于填充触发发送
+                pad_len = max(0, need - 2)  # 去掉 ':' 与 '\n'
+                yield ":" + ("x" * pad_len) + "\n" + msg
+            else:
+                yield msg
+
+        my_queue = Queue(maxsize=8)
+        with _sse_lock:
+            _sse_queues.append(my_queue)
+        try:
+            # 握手：先发 retry，再发 connected（带 4KB 填充），触发 Waitress 立即发送
+            yield "retry: 8000\n"
+            yield from _yield_sse_data(json.dumps({"type": "connected"}))
+            time.sleep(0.05)
+            while True:
+                try:
+                    data = my_queue.get(timeout=15)
+                    yield from _yield_sse_data(data)
+                    time.sleep(0.05)
+                except Empty:
+                    yield from _yield_sse_data(json.dumps({"type": "ping"}))
+                    time.sleep(0.05)
+        finally:
+            with _sse_lock:
+                try:
+                    _sse_queues.remove(my_queue)
+                except ValueError:
+                    pass
+
+    return Response(
+        generate(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.route("/file")
@@ -363,7 +445,30 @@ def upload():
     if "\\" in name or "/" in name or name in (".", ".."):
         name = secure_filename(f.filename) or "upload"
     dest = full / name
-    dest_tmp = full / (name + ".tmp")
+    # 同名处理：覆盖 / 自动重命名（否则返回 409 由前端弹窗让用户选）
+    if dest.exists():
+        overwrite = (request.form.get("overwrite") or "").strip().lower() in ("1", "true", "yes")
+        do_rename = (request.form.get("rename") or "").strip().lower() in ("1", "true", "yes")
+        if overwrite:
+            dest_tmp = full / (name + ".tmp")  # 继续写入 .tmp，最后 replace 覆盖
+        elif do_rename:
+            # 新文件名：原名_YYYYMMDDHHMMSSmmm.后缀，若仍存在则加 _2、_3…
+            if "." in name:
+                stem, ext = name.rsplit(".", 1)[0] or name, "." + name.rsplit(".", 1)[1]
+            else:
+                stem, ext = name, ""
+            ts = datetime.now().strftime("%Y%m%d%H%M%S") + ("%03d" % (datetime.now().microsecond // 1000))
+            for n in range(1, 10000):
+                suffix = ("_" + str(n)) if n > 1 else ""
+                name = stem + "_" + ts + suffix + ext
+                dest = full / name
+                if not dest.exists():
+                    break
+            dest_tmp = full / (name + ".tmp")
+        else:
+            return jsonify({"error": "file_exists", "name": name}), 409
+    else:
+        dest_tmp = full / (name + ".tmp")
     content_length = request.content_length
     logger.info("Upload start: name=%s path=%s content_length=%s dest=%s", name, raw_path, content_length, dest)
 
@@ -422,6 +527,12 @@ def upload():
         written = written_ref[0]
         dest_tmp.replace(dest)
         logger.info("Upload done: name=%s size=%s bytes (temp cleared)", name, written)
+        _notify_list_changed({
+            "dir": _rel_to_posix(rel),
+            "action": "upload",
+            "name": name,
+            "message": f"已上传：{name}",
+        })
         return jsonify({"ok": True, "name": name})
     except OSError as e:
         _remove_partial()
@@ -454,12 +565,20 @@ def delete_path():
     if not full.exists():
         return jsonify({"error": "路径不存在"}), 404
     try:
+        deleted_name = full.name
+        parent_rel = rel.parent
         if full.is_file():
             os.remove(full)
         elif full.is_dir():
             shutil.rmtree(full)
         else:
             return jsonify({"error": "不支持的类型"}), 400
+        _notify_list_changed({
+            "dir": _rel_to_posix(parent_rel),
+            "action": "delete",
+            "name": deleted_name,
+            "message": f"已删除：{deleted_name}",
+        })
         return jsonify({"ok": True})
     except OSError as e:
         logger.exception("Delete failed: %s", e)
@@ -492,6 +611,12 @@ def mkdir():
         return jsonify({"error": "已存在同名文件或文件夹"}), 400
     try:
         new_dir.mkdir(parents=False)
+        _notify_list_changed({
+            "dir": _rel_to_posix(rel),
+            "action": "mkdir",
+            "name": name,
+            "message": f"已新建文件夹：{name}",
+        })
         return jsonify({"ok": True, "path": _path_to_url_segment(rel / name)})
     except OSError as e:
         logger.exception("Mkdir failed: %s", e)
@@ -623,7 +748,7 @@ def run_server(host: str, port: int, root_dir: str):
             threads=8,
             channel_timeout=14400,   # 4 小时，支持几十 GB 大文件上传不断开
             max_request_body_size=20 * 1024**3,  # 20GB（默认 1GB 会拒绝 >1G 上传；0 在部分环境可能异常，用明确大值）
-            send_bytes=256 * 1024,
+            send_bytes=4096,         # 较小以便 SSE 等流式响应及时发出（256KB 会缓冲导致客户端收不到）
             recv_bytes=512 * 1024,   # 512KB 每次 recv，大文件上传更吃满带宽
         )
     except ImportError:

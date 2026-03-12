@@ -4,9 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>文件共享</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
+  <!-- 避免依赖外网字体：在无外网/弱网环境会导致首屏加载很慢 -->
   <style>
     :root {
       --bg: #0f0f12;
@@ -22,7 +20,7 @@
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
@@ -156,6 +154,89 @@
     .btn-danger:hover { background: rgba(239,68,68,.15); }
     .btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
     .btn-ghost:hover { background: var(--surface-hover); color: var(--text); }
+    .btn-icon{
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      justify-content: center;
+      border-radius: 12px;
+    }
+    .btn-icon span{ font-size: 16px; line-height: 1; }
+    .pull-indicator{
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      height: 0px;
+      overflow: hidden;
+      transition: height .18s ease;
+    }
+    .pull-indicator .inner{
+      height: 52px;
+      margin: 0 0 12px 0;
+      background: rgba(99,102,241,.10);
+      border: 1px solid rgba(99,102,241,.25);
+      color: var(--accent);
+      border-radius: 14px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:10px;
+      font-weight: 600;
+      letter-spacing: .01em;
+    }
+    .pull-indicator .spinner{
+      width: 16px; height: 16px;
+      border-radius: 999px;
+      border: 2px solid rgba(99,102,241,.25);
+      border-top-color: var(--accent);
+      animation: spin .9s linear infinite;
+      display:none;
+    }
+    .pull-indicator.refreshing .spinner{ display:inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .toast-list-update {
+      position: fixed;
+      top: 12px;
+      right: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      background: rgba(24, 24, 28, 0.94);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(99, 102, 241, 0.25);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 0.85rem;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+      z-index: 1000;
+      opacity: 0;
+      transform: translateX(120%);
+      transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease;
+      pointer-events: none;
+      max-width: calc(100vw - 32px);
+    }
+    .toast-list-update .toast-icon {
+      flex-shrink: 0;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: rgba(34, 197, 94, 0.2);
+      color: var(--success);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .toast-list-update.show {
+      transform: translateX(0);
+      opacity: 1;
+    }
+    @media (max-width: 720px) {
+      .toast-list-update { top: 10px; right: 10px; padding: 6px 12px; font-size: 0.8rem; }
+      .toast-list-update .toast-icon { width: 16px; height: 16px; font-size: 10px; }
+    }
     .upload-target { margin-top: 8px; font-size: 0.9rem; color: var(--text-muted); display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
     .upload-target .target-path { color: var(--accent); }
     .upload-cancel-wrap { margin-top: 6px; }
@@ -265,6 +346,57 @@
     .delete-confirm-card { max-width: 420px; }
     .delete-confirm-msg { color: var(--text); line-height: 1.6; margin: 0; }
     .delete-confirm-msg strong { color: var(--danger); }
+    .file-exists-card { max-width: 520px; }
+    .file-exists-head{
+      display:flex;
+      align-items:center;
+      gap:12px;
+    }
+    .file-exists-icon{
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight: 800;
+      background: rgba(245, 158, 11, 0.16);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      color: #f59e0b;
+      flex: 0 0 auto;
+    }
+    .file-exists-sub{
+      color: var(--text-muted);
+      font-size: 0.86rem;
+      margin-top: 2px;
+    }
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      padding: 2px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(0,0,0,.18);
+      color: var(--text);
+      font-size: 0.86rem;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+    .file-exists-actions{
+      display:flex;
+      gap: 10px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+    .btn-warn{
+      background: rgba(245, 158, 11, 0.14);
+      color: #f59e0b;
+      border: 1px solid rgba(245, 158, 11, 0.35);
+    }
+    .btn-warn:hover{ background: rgba(245, 158, 11, 0.22); }
     .modal-body{
       padding: 14px;
       overflow: auto;
@@ -391,6 +523,12 @@
 </head>
 <body>
   <div class="layout">
+    <div class="pull-indicator" id="pullIndicator" aria-hidden="true">
+      <div class="inner">
+        <span class="spinner" aria-hidden="true"></span>
+        <span id="pullText">下拉刷新</span>
+      </div>
+    </div>
     <header>
       <div class="logo">文件共享</div>
       <div class="header-left">
@@ -402,6 +540,9 @@
       </div>
       <div class="search">
         <input id="searchInput" type="text" placeholder="搜索：文件名 / *.mp4 / *.pdf（支持 * 通配符）">
+        <button type="button" class="btn btn-ghost btn-icon" id="btnRefresh" title="刷新" aria-label="刷新">
+          <span>⟳</span>
+        </button>
       </div>
     </header>
 
@@ -485,6 +626,8 @@
     </div>
   </div>
 
+  <div class="toast-list-update" id="toastListUpdate" role="status" aria-live="polite"><span class="toast-icon" aria-hidden="true">✓</span><span>列表已更新</span></div>
+
   <div class="modal" id="deleteConfirmModal" role="dialog" aria-modal="true" aria-labelledby="deleteConfirmTitle" aria-hidden="true">
     <div class="modal-card delete-confirm-card">
       <div class="modal-header">
@@ -498,6 +641,28 @@
     </div>
   </div>
 
+  <div class="modal" id="fileExistsModal" role="dialog" aria-modal="true" aria-labelledby="fileExistsTitle" aria-hidden="true">
+    <div class="modal-card file-exists-card">
+      <div class="modal-header">
+        <div class="file-exists-head">
+          <span class="file-exists-icon" aria-hidden="true">!</span>
+          <div>
+            <div class="modal-title" id="fileExistsTitle" style="white-space:normal;">文件已存在</div>
+            <div class="file-exists-sub">目标目录中有同名文件，选择接下来的处理方式</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-body">
+        <p id="fileExistsMessage" class="delete-confirm-msg"></p>
+        <div class="file-exists-actions">
+          <button type="button" class="btn btn-warn" id="fileExistsOverwrite">覆盖</button>
+          <button type="button" class="btn btn-ghost" id="fileExistsSkip">跳过</button>
+          <button type="button" class="btn btn-primary" id="fileExistsRename">自动重命名</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
     const base = '/file';
     let currentPath = '';
@@ -507,9 +672,11 @@
     let sortDir = 'desc';
     let currentXhr = null;
     let uploadAborted = false;
+    let isRefreshing = false;
 
-    function apiUrl(path) {
-      const u = base + '/api/list?path=' + encodeURIComponent(path || '');
+    function apiUrl(path, forceFresh) {
+      let u = base + '/api/list?path=' + encodeURIComponent(path || '');
+      if (forceFresh) u += '&_t=' + Date.now();
       return u;
     }
     function getUploadPath() {
@@ -722,7 +889,7 @@
       updateSortIcons();
     }
 
-    function loadDir(path) {
+    function loadDir(path, forceFresh) {
       currentPath = normalizePath(path);
       document.getElementById('loading').style.display = 'block';
       document.getElementById('table').style.display = 'none';
@@ -732,7 +899,7 @@
       var btnUp = document.getElementById('btnUp');
       if (btnUp) btnUp.style.display = currentPath ? 'inline-block' : 'none';
 
-      fetch(apiUrl(currentPath))
+      fetch(apiUrl(currentPath, !!forceFresh))
         .then(r => {
           if (!r.ok) throw new Error(r.status === 404 ? '路径不存在' : '请求失败');
           return r.json();
@@ -750,6 +917,88 @@
           document.getElementById('error').style.display = 'block';
         });
     }
+
+    function refreshNow() {
+      if (isRefreshing) return;
+      isRefreshing = true;
+      const pull = document.getElementById('pullIndicator');
+      const pullText = document.getElementById('pullText');
+      if (pull && pullText) {
+        pull.classList.add('refreshing');
+        pull.style.height = '64px';
+        pullText.textContent = '正在刷新…';
+        pull.setAttribute('aria-hidden', 'false');
+      }
+      Promise.resolve()
+        .then(() => loadDir(currentPath, true))
+        .finally(() => {
+          setTimeout(() => {
+            if (pull && pullText) {
+              pull.classList.remove('refreshing');
+              pull.style.height = '0px';
+              pullText.textContent = '下拉刷新';
+              pull.setAttribute('aria-hidden', 'true');
+            }
+            isRefreshing = false;
+          }, 350);
+        });
+    }
+
+    document.getElementById('btnRefresh').addEventListener('click', refreshNow);
+
+    // -------- 移动端下拉刷新（顶部下拉，松手刷新） --------
+    (function setupPullToRefresh() {
+      const pull = document.getElementById('pullIndicator');
+      const pullText = document.getElementById('pullText');
+      if (!pull || !pullText) return;
+      let startY = 0;
+      let pulling = false;
+      let dy = 0;
+      const THRESHOLD = 62;
+      const MAX = 92;
+
+      function canPull() {
+        if (isRefreshing) return false;
+        if (document.getElementById('previewModal')?.classList.contains('open')) return false;
+        if (document.getElementById('pickerModal')?.classList.contains('open')) return false;
+        if (document.getElementById('deleteConfirmModal')?.classList.contains('open')) return false;
+        return (window.scrollY || document.documentElement.scrollTop || 0) <= 0;
+      }
+
+      document.addEventListener('touchstart', function(e) {
+        if (!canPull()) return;
+        if (!e.touches || e.touches.length !== 1) return;
+        startY = e.touches[0].clientY;
+        pulling = true;
+        dy = 0;
+      }, { passive: true });
+
+      document.addEventListener('touchmove', function(e) {
+        if (!pulling) return;
+        if (!e.touches || e.touches.length !== 1) return;
+        dy = e.touches[0].clientY - startY;
+        if (dy <= 0) { pulling = false; pull.style.height = '0px'; return; }
+        // 只在顶部下拉时拦截滚动，模拟抖音顶部下拉刷新
+        e.preventDefault();
+        const h = Math.min(MAX, Math.floor(dy));
+        pull.style.height = h + 'px';
+        pull.setAttribute('aria-hidden', 'false');
+        pullText.textContent = (dy >= THRESHOLD) ? '松手刷新' : '下拉刷新';
+      }, { passive: false });
+
+      document.addEventListener('touchend', function() {
+        if (!pulling) return;
+        pulling = false;
+        if (dy >= THRESHOLD) {
+          refreshNow();
+        } else {
+          pull.style.height = '0px';
+          pull.setAttribute('aria-hidden', 'true');
+          pullText.textContent = '下拉刷新';
+        }
+        dy = 0;
+      }, { passive: true });
+    })();
 
     document.getElementById('btnUp').addEventListener('click', function(e) {
       e.preventDefault();
@@ -1105,7 +1354,38 @@
       let index = 0;
       const total = files.length;
 
-      function uploadOne() {
+      function showFileExistsModal(fileName) {
+        return new Promise(function (resolve) {
+          const modal = document.getElementById('fileExistsModal');
+          const msgEl = document.getElementById('fileExistsMessage');
+          if (!modal || !msgEl) { resolve('skip'); return; }
+          const dirLabel = (function() {
+            const p = normalizePath(getUploadPath());
+            return p ? p : '根目录';
+          })();
+          msgEl.innerHTML =
+            '已检测到同名文件：<span class=\"pill\">' + escapeHtml(fileName || '') + '</span>' +
+            '<br>目标目录：<span class=\"pill\">' + escapeHtml(dirLabel) + '</span>' +
+            '<br><span class=\"muted\">建议选择「自动重命名」，避免覆盖已有文件。自动重命名格式：文件名_YYYYMMDDHHMMSSmmm.后缀</span>';
+          modal.classList.add('open');
+          modal.setAttribute('aria-hidden', 'false');
+          function closeModal(choice) {
+            modal.classList.remove('open');
+            modal.setAttribute('aria-hidden', 'true');
+            modal.onclick = null;
+            document.getElementById('fileExistsOverwrite').onclick = null;
+            document.getElementById('fileExistsSkip').onclick = null;
+            document.getElementById('fileExistsRename').onclick = null;
+            resolve(choice);
+          }
+          modal.onclick = function (e) { if (e.target === modal) closeModal('skip'); };
+          document.getElementById('fileExistsOverwrite').onclick = function () { closeModal('overwrite'); };
+          document.getElementById('fileExistsSkip').onclick = function () { closeModal('skip'); };
+          document.getElementById('fileExistsRename').onclick = function () { closeModal('rename'); };
+        });
+      }
+
+      function uploadOne(opts) {
         if (uploadAborted) {
           status.textContent = '已取消上传';
           showUploadError('已取消上传');
@@ -1129,6 +1409,8 @@
         const fd = new FormData();
         fd.append('path', uploadPath);
         fd.append('file', file);
+        if (opts && opts.overwrite) fd.append('overwrite', '1');
+        if (opts && opts.rename) fd.append('rename', '1');
 
         const xhr = new XMLHttpRequest();
         currentXhr = xhr;
@@ -1163,6 +1445,20 @@
             currentXhr = null;
             uploadOne();
             return;
+          }
+          if (xhr.status === 409) {
+            try {
+              const j = JSON.parse(xhr.responseText || '{}');
+              if (j.error === 'file_exists') {
+                currentXhr = null;
+                showFileExistsModal(j.name || file.name).then(function (choice) {
+                  if (choice === 'overwrite') uploadOne({ overwrite: 1 });
+                  else if (choice === 'skip') { index++; fill.style.width = (100 * index / total) + '%'; uploadOne(); }
+                  else if (choice === 'rename') uploadOne({ rename: 1 });
+                });
+                return;
+              }
+            } catch (e) {}
           }
           index++;
           let msg = '';
@@ -1208,7 +1504,81 @@
       uploadOne();
     }
 
+    function showListUpdatedToast(msg) {
+      const el = document.getElementById('toastListUpdate');
+      if (!el) return;
+      if (msg) {
+        const textSpan = el.querySelector('span:last-child');
+        if (textSpan) textSpan.textContent = String(msg);
+      }
+      el.classList.add('show');
+      clearTimeout(showListUpdatedToast._t);
+      showListUpdatedToast._t = setTimeout(function() {
+        el.classList.remove('show');
+      }, 2200);
+    }
+
+    // -------- 多人实时提醒：合并/节流刷新（避免批量上传导致不停刷新）--------
+    const _dirUpdateAgg = Object.create(null); // key: dir(normalized) -> {count, lastMsg, timer}
+    function _formatDirLabel(dir) {
+      const d = normalizePath(dir || '');
+      return d ? d : '根目录';
+    }
+    function _scheduleRefreshForDir(dir) {
+      const d = normalizePath(dir || '');
+      if (!_dirUpdateAgg[d]) _dirUpdateAgg[d] = { count: 0, lastMsg: '', timer: null };
+      const agg = _dirUpdateAgg[d];
+      if (agg.timer) clearTimeout(agg.timer);
+      // 800ms 内同目录多次更新只刷新一次；更新停止后再刷新（trailing）
+      agg.timer = setTimeout(function() {
+        agg.timer = null;
+        // 只在用户仍停留在该目录时刷新，避免打断当前浏览
+        const cur = normalizePath(currentPath || '');
+        if (d === cur) loadDir(currentPath, true);
+        agg.count = 0;
+        agg.lastMsg = '';
+      }, 800);
+    }
+
+    function connectSSE() {
+      if (typeof EventSource === 'undefined') return;
+      var url = base + '/api/events';
+      var es = new EventSource(url);
+      es.onmessage = function(e) {
+        try {
+          var data = JSON.parse(e.data || '{}');
+          if (data.type === 'refresh') {
+            const dir = normalizePath(data.dir || '');
+            const cur = normalizePath(currentPath || '');
+            if (!_dirUpdateAgg[dir]) _dirUpdateAgg[dir] = { count: 0, lastMsg: '', timer: null };
+            _dirUpdateAgg[dir].count += 1;
+            _dirUpdateAgg[dir].lastMsg = data.message || '';
+
+            // 只在当前目录更新时触发“合并后的刷新”
+            if (dir === cur) {
+              _scheduleRefreshForDir(dir);
+            }
+
+            // toast 合并显示：短时间内多条更新不反复弹出，只更新文案并延长停留时间
+            const count = _dirUpdateAgg[dir].count || 1;
+            const baseMsg = _dirUpdateAgg[dir].lastMsg || ('目录已更新：' + _formatDirLabel(dir));
+            const msg = (count > 1) ? (baseMsg + `（+${count}）`) : baseMsg;
+            showListUpdatedToast(msg);
+          }
+        } catch (err) {}
+      };
+      es.onerror = function() {
+        es.close();
+        setTimeout(connectSSE, 8000);
+      };
+    }
+
+    // 先加载列表，等页面完成加载后再建立 SSE 长连接；
+    // 否则部分浏览器会因为 SSE pending 导致标签页一直“加载中”。
     loadDir('');
+    window.addEventListener('load', function() {
+      setTimeout(connectSSE, 50);
+    });
   </script>
 </body>
 </html>
