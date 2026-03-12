@@ -10,10 +10,11 @@
 - **中文路径**：从选择目录到 URL 编解码、读写文件，全程使用 UTF-8，避免 Windows 下中文乱码或访问失败。
 - **功能截图**：
   1、启动设置界面
-  <img width="918" height="621" alt="image" src="https://github.com/user-attachments/assets/5d0ac42a-ede0-4569-965a-b5be1a730cf3" />
+  <img width="894" height="610" alt="image" src="https://github.com/user-attachments/assets/cd735cdb-0045-4fb7-915f-1b28977d1448" />
+
 
   2、访问页面
-  <img width="1111" height="779" alt="image" src="https://github.com/user-attachments/assets/ebb0c2d6-44d3-4780-b152-c88d49724433" />
+  <img width="894" height="610" alt="image" src="https://github.com/user-attachments/assets/ebb0c2d6-44d3-4780-b152-c88d49724433" />
 
 
 ## 运行方式
