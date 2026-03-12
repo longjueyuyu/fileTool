@@ -35,14 +35,27 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       gap: 16px;
       margin-bottom: 24px;
       padding-bottom: 16px;
       border-bottom: 1px solid var(--border);
     }
-    .header-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-    .btn-up { color: var(--accent); text-decoration: none; font-size: 0.9rem; padding: 6px 12px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); cursor: pointer; }
+    .header-left { display: flex; align-items: center; gap: 12px; flex-wrap: nowrap; min-width: 0; flex: 1; }
+    .btn-up {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.9rem;
+      padding: 6px 12px;
+      border-radius: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      white-space: nowrap;
+      flex: 0 0 auto;
+    }
     .btn-up:hover { background: var(--surface-hover); }
     .logo {
       font-weight: 700;
@@ -56,13 +69,26 @@
       gap: 6px;
       font-size: 0.9rem;
       color: var(--text-muted);
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      flex: 1 1 auto;
     }
+    .breadcrumb span { flex: 0 0 auto; }
     .breadcrumb a {
       color: var(--accent);
       text-decoration: none;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 0 1 auto;
     }
     .breadcrumb a:hover { text-decoration: underline; }
+    .breadcrumb .bc-ellipsis { color: var(--text-muted); flex: 0 0 auto; }
+    .breadcrumb .bc-current { color: var(--text); }
     .upload-zone {
       background: var(--surface);
       border: 2px dashed var(--border);
@@ -237,15 +263,16 @@
       .toast-list-update { top: 10px; right: 10px; padding: 6px 12px; font-size: 0.8rem; }
       .toast-list-update .toast-icon { width: 16px; height: 16px; font-size: 10px; }
     }
-    .upload-target { margin-top: 8px; font-size: 0.9rem; color: var(--text-muted); display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-    .upload-target .target-path { color: var(--accent); }
+    .upload-target { margin-top: 8px; font-size: 0.9rem; color: var(--text-muted); display: flex; align-items: center; flex-wrap: nowrap; gap: 8px; min-width: 0; }
+    .upload-target span:first-child { flex: 0 0 auto; }
+    .upload-target .target-path { color: var(--accent); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; }
     .upload-cancel-wrap { margin-top: 6px; }
     .search {
       display: flex;
       align-items: center;
       justify-content: flex-end;
       gap: 10px;
-      flex: 1;
+      flex: 0 0 auto;
       margin-left: auto;
       min-width: 220px;
     }
@@ -403,7 +430,26 @@
       flex: 1;
     }
     .preview-media{ width: 100%; max-height: 520px; display: block; }
-    .preview-img{ max-width: 100%; max-height: 520px; display: block; margin: 0 auto; }
+    .preview-img{ max-width: 100%; max-height: 520px; display: block; margin: 0 auto; cursor: zoom-in; }
+    .img-zoom-overlay{
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.86);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: 18px;
+      z-index: 2000;
+    }
+    .img-zoom-overlay img{
+      max-width: 96vw;
+      max-height: 92vh;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.08);
+      box-shadow: 0 30px 90px rgba(0,0,0,.55);
+      cursor: zoom-out;
+      background: rgba(0,0,0,.10);
+    }
     .preview-text{
       white-space: pre-wrap;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -448,8 +494,9 @@
       header{
         align-items: flex-start;
         gap: 10px;
+        flex-wrap: wrap;
       }
-      .header-left{ width: 100%; }
+      .header-left{ width: 100%; flex-wrap: nowrap; }
       .search{
         width: 100%;
         min-width: 0;
@@ -536,7 +583,7 @@
         <nav class="breadcrumb" id="breadcrumb">
           <a href="#" data-path="">根目录</a>
         </nav>
-        <button type="button" class="btn btn-ghost" id="btnNewFolder" style="padding:6px 12px; font-size:0.85rem;">新建文件夹</button>
+        <button type="button" class="btn btn-ghost" id="btnNewFolder" style="padding:6px 12px; font-size:0.85rem; white-space:nowrap; flex:0 0 auto;">新建文件夹</button>
       </div>
       <div class="search">
         <input id="searchInput" type="text" placeholder="搜索：文件名 / *.mp4 / *.pdf（支持 * 通配符）">
@@ -548,7 +595,11 @@
 
     <div class="upload-zone" id="uploadZone">
       <input type="file" id="fileInput" multiple>
-      <div class="btn btn-primary">选择文件上传</div>
+      <input type="file" id="folderInput" webkitdirectory directory multiple>
+      <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+        <div class="btn btn-primary" id="btnPickFiles">选择文件上传</div>
+        <div class="btn btn-primary" id="btnPickFolder">选择文件夹上传</div>
+      </div>
       <p>或拖拽文件到此处</p>
       <div class="upload-target">
         <span>上传到：</span>
@@ -688,9 +739,11 @@
       if (!disp) return;
       if (uploadTargetPath !== null && uploadTargetPath !== undefined && uploadTargetPath !== '') {
         disp.textContent = uploadTargetPath;
+        disp.title = uploadTargetPath;
         if (useCur) useCur.style.display = 'inline-flex';
       } else {
         disp.textContent = currentPath ? currentPath : '根目录';
+        disp.title = currentPath ? currentPath : '根目录';
         if (useCur) useCur.style.display = 'none';
       }
     }
@@ -713,19 +766,33 @@
 
     function buildBreadcrumb(path) {
       const parts = normalizePath(path).split('/').filter(Boolean);
-      let html = '<a href="#" data-path="">根目录</a>';
-      let acc = '';
-      parts.forEach(p => {
-        acc += (acc ? '/' : '') + p;
-        html += ' <span>/</span> <a href="#" data-path="' + attrEsc(acc) + '">' + escapeHtml(p) + '</a>';
-      });
-      document.getElementById('breadcrumb').innerHTML = html;
-      document.querySelectorAll('#breadcrumb a').forEach(a => {
-        a.addEventListener('click', e => {
+      function truncateName(s, maxLen) {
+        const str = String(s || '');
+        if (str.length <= maxLen) return str;
+        return str.slice(0, Math.max(1, maxLen - 1)) + '…';
+      }
+      // Windows 风格：根目录 / … / 当前目录（不展示完整路径，避免挤压/换行）
+      let html = '<a href="#" data-path="" title="根目录">根目录</a>';
+      if (parts.length === 0) {
+        // root only
+      } else if (parts.length === 1) {
+        const last = parts[0];
+        html += ' <span>/</span> <span class="bc-current" title="' + attrEsc(last) + '">' + escapeHtml(truncateName(last, 18)) + '</span>';
+      } else {
+        const last = parts[parts.length - 1];
+        html += ' <span>/</span> <span class="bc-ellipsis" title="省略中间目录">…</span> <span>/</span> '
+          + '<span class="bc-current" title="' + attrEsc(last) + '">' + escapeHtml(truncateName(last, 18)) + '</span>';
+      }
+      const bc = document.getElementById('breadcrumb');
+      bc.innerHTML = html;
+      bc.title = normalizePath(path) ? normalizePath(path) : '根目录';
+      const rootLink = bc.querySelector('a[data-path=""]');
+      if (rootLink) {
+        rootLink.addEventListener('click', e => {
           e.preventDefault();
-          loadDir(a.getAttribute('data-path') || '');
+          loadDir('');
         });
-      });
+      }
     }
 
     function escapeHtml(s) {
@@ -735,7 +802,8 @@
     }
 
     function isPreviewable(name) {
-      return /\.(jpg|jpeg|png|gif|webp|svg|bmp|mp4|webm|ogg|mp3|wav|m4a|pdf)$/i.test(name);
+      // 媒体 + PDF + 常见文本（文本会走 /api/text 弹窗预览）
+      return /\.(jpg|jpeg|png|gif|webp|svg|bmp|mp4|webm|ogg|mp3|wav|m4a|pdf|txt|log|json|md|py|js|ts|css|html|xml|csv|ini|yaml|yml)$/i.test(name);
     }
 
     function extLower(name) {
@@ -1077,6 +1145,17 @@
         img.className = 'preview-img';
         img.src = base + '/api/preview/' + pathEnc;
         img.alt = name;
+        img.title = '点击放大';
+        img.addEventListener('click', function() {
+          const overlay = document.createElement('div');
+          overlay.className = 'img-zoom-overlay';
+          const big = document.createElement('img');
+          big.src = img.src;
+          big.alt = img.alt || '';
+          overlay.appendChild(big);
+          overlay.addEventListener('click', function() { overlay.remove(); });
+          document.body.appendChild(overlay);
+        });
         modalBody.innerHTML = '';
         modalBody.appendChild(img);
         return;
@@ -1183,17 +1262,43 @@
 
     const zone = document.getElementById('uploadZone');
     const input = document.getElementById('fileInput');
-    zone.addEventListener('click', () => input.click());
+    const folderInput = document.getElementById('folderInput');
+    const btnPickFiles = document.getElementById('btnPickFiles');
+    const btnPickFolder = document.getElementById('btnPickFolder');
+    if (btnPickFiles) btnPickFiles.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); input.click(); });
+    if (btnPickFolder) btnPickFolder.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); folderInput.click(); });
+    // 只在点击“上传区空白处”时才默认打开选文件，避免抢走子按钮点击
+    zone.addEventListener('click', (e) => {
+      if (e.target === zone) input.click();
+    });
     zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
     zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
     zone.addEventListener('drop', e => {
       e.preventDefault();
       zone.classList.remove('dragover');
-      if (e.dataTransfer.files.length) doUpload(Array.from(e.dataTransfer.files));
+      const dt = e.dataTransfer;
+      if (!dt) return;
+      // 当前主流浏览器不支持通过拖拽直接获取整个文件夹结构，这里检测到拖拽的是文件夹时给出友好提示
+      const items = dt.items || [];
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        if (it && it.kind === 'file' && typeof it.webkitGetAsEntry === 'function') {
+          const entry = it.webkitGetAsEntry();
+          if (entry && entry.isDirectory) {
+            showUploadError('当前浏览器暂不支持拖动文件夹直接上传，请点击上方“选择文件夹上传”按钮。');
+            return;
+          }
+        }
+      }
+      if (dt.files && dt.files.length) doUpload(Array.from(dt.files));
     });
     input.addEventListener('change', () => {
       if (input.files.length) doUpload(Array.from(input.files));
       input.value = '';
+    });
+    folderInput.addEventListener('change', () => {
+      if (folderInput.files.length) doUpload(Array.from(folderInput.files));
+      folderInput.value = '';
     });
 
     function showUploadError(msg) {
@@ -1332,7 +1437,9 @@
 
     document.getElementById('btnCancelUpload').addEventListener('click', function() {
       uploadAborted = true;
-      if (currentXhr) currentXhr.abort();
+      if (currentXhr) {
+        try { currentXhr.abort(); } catch(e) {}
+      }
     });
 
     function doUpload(files) {
@@ -1340,6 +1447,7 @@
       hideUploadError();
       uploadAborted = false;
       currentXhr = null;
+
       const bar = document.getElementById('progressBar');
       const fill = document.getElementById('progressFill');
       const status = document.getElementById('uploadStatus');
@@ -1348,24 +1456,39 @@
       status.style.display = 'block';
       if (cancelWrap) cancelWrap.style.display = 'block';
       fill.style.width = '0%';
-      status.textContent = `准备上传 ${files.length} 个文件…`;
-      const uploadPath = getUploadPath();
 
+      const baseUploadPath = getUploadPath();
+
+      // 构建任务：支持 webkitRelativePath（文件夹上传）保留子目录结构
+      const tasks = files.map(f => {
+        const relp = (f.webkitRelativePath || '').replace(/\\/g, '/');
+        let subdir = '';
+        if (relp && relp.includes('/')) subdir = relp.split('/').slice(0, -1).join('/');
+        const dir = normalizePath((baseUploadPath ? (baseUploadPath + '/') : '') + subdir);
+        return { file: f, dir: dir, mkdirs: !!subdir };
+      });
+
+      const total = tasks.length;
       let index = 0;
-      const total = files.length;
+      const totalBytes = tasks.reduce((s, t) => s + (t.file.size || 0), 0);
+      let completedBytes = 0;
 
-      function showFileExistsModal(fileName) {
+      function updateOverallUI(currentLoaded) {
+        const loaded = completedBytes + (currentLoaded || 0);
+        const pct = totalBytes ? (loaded / totalBytes * 100) : (index / Math.max(1, total) * 100);
+        fill.style.width = Math.min(100, pct).toFixed(1) + '%';
+        status.textContent = `上传中：已完成 ${index}/${total}（${Math.min(100, pct).toFixed(0)}%）`;
+      }
+
+      function showFileExistsModal(fileName, targetDir) {
         return new Promise(function (resolve) {
           const modal = document.getElementById('fileExistsModal');
           const msgEl = document.getElementById('fileExistsMessage');
           if (!modal || !msgEl) { resolve('skip'); return; }
-          const dirLabel = (function() {
-            const p = normalizePath(getUploadPath());
-            return p ? p : '根目录';
-          })();
+          const dirLabel = targetDir ? targetDir : (normalizePath(baseUploadPath) || '根目录');
           msgEl.innerHTML =
             '已检测到同名文件：<span class=\"pill\">' + escapeHtml(fileName || '') + '</span>' +
-            '<br>目标目录：<span class=\"pill\">' + escapeHtml(dirLabel) + '</span>' +
+            '<br>目标目录：<span class=\"pill\">' + escapeHtml(dirLabel || '根目录') + '</span>' +
             '<br><span class=\"muted\">建议选择「自动重命名」，避免覆盖已有文件。自动重命名格式：文件名_YYYYMMDDHHMMSSmmm.后缀</span>';
           modal.classList.add('open');
           modal.setAttribute('aria-hidden', 'false');
@@ -1385,6 +1508,18 @@
         });
       }
 
+      function finishAll() {
+        fill.style.width = '100%';
+        status.textContent = `上传完成，共 ${total} 个文件/项。`;
+        currentXhr = null;
+        if (cancelWrap) cancelWrap.style.display = 'none';
+        setTimeout(() => {
+          bar.style.display = 'none';
+          status.style.display = 'none';
+          loadDir(currentPath, true);
+        }, 350);
+      }
+
       function uploadOne(opts) {
         if (uploadAborted) {
           status.textContent = '已取消上传';
@@ -1394,55 +1529,33 @@
           return;
         }
         if (index >= total) {
-          fill.style.width = '100%';
-          status.textContent = `上传完成，共 ${total} 个文件。`;
-          currentXhr = null;
-          if (cancelWrap) cancelWrap.style.display = 'none';
-          setTimeout(() => {
-            bar.style.display = 'none';
-            status.style.display = 'none';
-            loadDir(currentPath);
-          }, 350);
+          finishAll();
           return;
         }
-        const file = files[index];
+        const task = tasks[index];
         const fd = new FormData();
-        fd.append('path', uploadPath);
-        fd.append('file', file);
+        fd.append('path', task.dir || '');
+        if (task.mkdirs) fd.append('mkdirs', '1');
+        fd.append('file', task.file);
         if (opts && opts.overwrite) fd.append('overwrite', '1');
         if (opts && opts.rename) fd.append('rename', '1');
 
         const xhr = new XMLHttpRequest();
         currentXhr = xhr;
-        const startTime = performance.now();
         xhr.open('POST', base + '/api/upload', true);
 
         xhr.upload.onprogress = function (e) {
           if (uploadAborted) return;
           if (!e.lengthComputable) return;
-          const pct = e.total ? (e.loaded / e.total * 100) : 0;
-          const dt = (performance.now() - startTime) / 1000 || 0.001;
-          const speed = (e.loaded / (1024 * 1024)) / dt;
-          fill.style.width = pct.toFixed(1) + '%';
-          if (pct >= 99.5) {
-            status.textContent = `已发送完毕 (${index + 1}/${total}) ${file.name}，正在等待服务器写入…`;
-          } else {
-            status.textContent = `正在上传 (${index + 1}/${total}) ${file.name} ${pct.toFixed(0)}% · ${speed.toFixed(1)} MB/s`;
-          }
+          updateOverallUI(e.loaded);
         };
 
         xhr.onreadystatechange = function () {
           if (xhr.readyState !== 4) return;
-          if (uploadAborted) {
-            status.textContent = '已取消上传';
-            showUploadError('已取消上传');
-            if (cancelWrap) cancelWrap.style.display = 'none';
-            currentXhr = null;
-            return;
-          }
+          if (uploadAborted) return;
           if (xhr.status >= 200 && xhr.status < 300) {
+            completedBytes += (task.file.size || 0);
             index++;
-            currentXhr = null;
             uploadOne();
             return;
           }
@@ -1450,57 +1563,43 @@
             try {
               const j = JSON.parse(xhr.responseText || '{}');
               if (j.error === 'file_exists') {
-                currentXhr = null;
-                showFileExistsModal(j.name || file.name).then(function (choice) {
-                  if (choice === 'overwrite') uploadOne({ overwrite: 1 });
-                  else if (choice === 'skip') { index++; fill.style.width = (100 * index / total) + '%'; uploadOne(); }
-                  else if (choice === 'rename') uploadOne({ rename: 1 });
+                showFileExistsModal(j.name || task.file.name, task.dir || '根目录').then(function (choice) {
+                  if (uploadAborted) return;
+                  if (choice === 'overwrite') { uploadOne({ overwrite: 1 }); return; }
+                  if (choice === 'rename') { uploadOne({ rename: 1 }); return; }
+                  // skip
+                  completedBytes += (task.file.size || 0);
+                  index++;
+                  uploadOne();
                 });
                 return;
               }
             } catch (e) {}
           }
-          index++;
           let msg = '';
-          if (xhr.status === 0) {
-            msg = uploadAborted ? '已取消上传' : '连接中断或网络错误（大文件请用有线、避免中途关页），可重试';
-          } else if (xhr.status === 413) {
-            msg = '请求体过大或被代理拒绝';
-          } else {
-            try {
-              const j = JSON.parse(xhr.responseText || '{}');
-              msg = j.error || ('HTTP ' + xhr.status);
-            } catch (e) {
-              msg = 'HTTP ' + xhr.status;
-            }
+          if (xhr.status === 0) msg = uploadAborted ? '已取消上传' : '连接中断或网络错误，可重试';
+          else if (xhr.status === 413) msg = '请求体过大或被代理拒绝';
+          else {
+            try { msg = (JSON.parse(xhr.responseText || '{}').error) || ('HTTP ' + xhr.status); } catch (e) { msg = 'HTTP ' + xhr.status; }
           }
-          status.textContent = `上传失败 (${index}/${total}) ${file.name}：${msg}`;
-          showUploadError(`上传失败 (${index}/${total}) ${file.name}：${msg}`);
-          fill.style.width = (100 * index / total) + '%';
-          currentXhr = null;
-          setTimeout(uploadOne, 1200);
+          showUploadError(`上传失败：${task.file.name}（${msg}）`);
+          completedBytes += (task.file.size || 0);
+          index++;
+          uploadOne();
         };
 
         xhr.onerror = function () {
-          if (uploadAborted) {
-            status.textContent = '已取消上传';
-            showUploadError('已取消上传');
-            if (cancelWrap) cancelWrap.style.display = 'none';
-            currentXhr = null;
-            return;
-          }
+          if (uploadAborted) return;
+          showUploadError(`上传出错：${task.file.name}，请检查网络或稍后重试`);
+          completedBytes += (task.file.size || 0);
           index++;
-          const errMsg = `上传出错 (${index}/${total})：${file.name}，请检查网络或稍后重试`;
-          status.textContent = errMsg;
-          showUploadError(errMsg);
-          fill.style.width = (100 * index / total) + '%';
-          currentXhr = null;
-          setTimeout(uploadOne, 1200);
+          uploadOne();
         };
 
         xhr.send(fd);
       }
 
+      updateOverallUI(0);
       uploadOne();
     }
 

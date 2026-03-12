@@ -3,7 +3,7 @@
 ## 架构
 
 - **main.py**：CustomTkinter 窗口。选择文件夹、端口后，通过 `subprocess.Popen` 启动子进程执行 `file_server.run_server()`，环境变量 `FILE_SHARE_ROOT`、`FILE_SHARE_PORT` 传入根目录和端口；停止时对子进程 `terminate()` 并 `wait()`。
-- **file_server.py**：Flask 应用。`/file`、`/file/` 返回 `templates/index.html`；`/file/api/list` 查询目录列表；`/file/api/download/<path>`、`/file/api/preview/<path>` 使用 **8MB 缓冲区**流式下发文件（`Response(generate(), direct_passthrough=True)`），以跑满局域网带宽；`/file/api/upload` 使用 **16MB 缓冲区**从请求流读入并写入磁盘；`/file/api/delete`（POST，JSON `{path}`）删除文件或递归删除目录；`/file/api/mkdir`（POST，JSON `{path, name}`）在指定父目录下新建文件夹。运行时会优先使用 **waitress**（8 线程、channel_timeout=14400、**max_request_body_size=20GB**）作为 WSGI 服务器，无 waitress 时回退到 Flask 内置多线程服务器。
+- **file_server.py**：Flask 应用。`/file`、`/file/` 返回 `templates/index.html`；`/file/api/list` 查询目录列表；`/file/api/download/<path>`、`/file/api/preview/<path>` 使用 **8MB 缓冲区**流式下发文件（`Response(generate(), direct_passthrough=True)`），以跑满局域网带宽；`/file/api/upload` 使用 **16MB 缓冲区**从请求流读入并写入磁盘；`/file/api/delete`（POST，JSON `{path}`）删除文件或递归删除目录；`/file/api/mkdir`（POST，JSON `{path, name}`）在指定父目录下新建文件夹。运行时会优先使用 **waitress**（默认 **32 线程**，可用环境变量 `FILE_SHARE_THREADS` 覆盖）、channel_timeout=14400、**max_request_body_size=20GB**）作为 WSGI 服务器，无 waitress 时回退到 Flask 内置多线程服务器。
 
 ## 中文路径处理（为什么能工作）
 

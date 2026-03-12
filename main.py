@@ -139,6 +139,18 @@ def main():
     app.title("局域网文件共享")
     app.geometry("720x460")
     app.minsize(640, 400)
+    # 某些 Windows 环境下窗口会在后台创建但不前置，导致“看起来没出来”
+    # 这里在启动后短暂置顶并激活一次，提升可见性（不改变常规交互）
+    def _bring_to_front():
+        try:
+            app.deiconify()
+            app.lift()
+            app.focus_force()
+            app.attributes("-topmost", True)
+            app.after(180, lambda: app.attributes("-topmost", False))
+        except Exception:
+            pass
+    app.after(120, _bring_to_front)
 
     # 变量
     folder_var = ctk.StringVar(value="未选择文件夹")
@@ -216,22 +228,24 @@ def main():
         if not ok:
             status_var.set(err or "启动失败")
             return
-        status_var.set("正在启动…")
+        set_status("正在启动…", kind="starting")
         btn_start.configure(state="disabled")
         btn_stop.configure(state="normal")
         entry_port.configure(state="disabled")
         btn_folder.configure(state="disabled")
+        btn_open.configure(state="disabled")
 
         def verify_started(attempt: int = 1, max_attempts: int = 18):
             global _server_process
             alive, msg = check_server_started(port)
             if not alive:
                 _server_process = None
-                status_var.set("启动失败: " + (msg or "端口可能被占用"))
+                set_status("启动失败: " + (msg or "端口可能被占用"), kind="error")
                 btn_start.configure(state="normal")
                 btn_stop.configure(state="disabled")
                 entry_port.configure(state="normal")
                 btn_folder.configure(state="normal")
+                btn_open.configure(state="disabled")
                 return
 
             # 服务进程还在：轮询端口是否可连接（避免 waitress 启动较慢导致误报）
@@ -239,17 +253,18 @@ def main():
             ok_local = _can_connect("127.0.0.1", port)
             ok_lan = (ip != "127.0.0.1") and _can_connect(ip, port)
             if ok_local or ok_lan:
-                status_var.set("服务已启动")
+                set_status("服务已启动", kind="running")
                 update_url()
                 update_qr()
+                btn_open.configure(state="normal")
                 return
 
             if attempt >= max_attempts:
                 # 进程活着但端口一直不可连：给出明确提示，但不强制判定失败（用户可自行访问验证）
-                status_var.set("服务进程已启动但端口暂不可连接（请稍后重试，或检查防火墙/端口占用）")
+                set_status("服务进程已启动但端口暂不可连接（请稍后重试，或检查防火墙/端口占用）", kind="warning")
                 return
 
-            status_var.set(f"正在启动…({attempt}/{max_attempts})")
+            set_status(f"正在启动…({attempt}/{max_attempts})", kind="starting")
             app.after(350, lambda: verify_started(attempt + 1, max_attempts))
             return
 
@@ -258,13 +273,14 @@ def main():
     def on_stop():
         stop_server()
         # 端口释放在 Windows 上可能需要极短时间，给一个明确提示
-        status_var.set("已停止（端口已释放）")
+        set_status("已停止（端口已释放）", kind="stopped")
         qr_label.configure(image=None, text="二维码")
         qr_hint_var.set("启动后生成二维码")
         btn_start.configure(state="normal")
         btn_stop.configure(state="disabled")
         entry_port.configure(state="normal")
         btn_folder.configure(state="normal")
+        btn_open.configure(state="disabled")
 
     def open_browser():
         u = url_var.get()
@@ -305,8 +321,25 @@ def main():
     ctk.CTkLabel(app, textvariable=url_var, text_color="#6366f1", font=ctk.CTkFont(weight="bold")).grid(row=row, column=1, columnspan=2, pady=8, padx=8, sticky="w")
     row += 1
 
+    def set_status(text: str, kind: str = "info"):
+        status_var.set(text)
+        # 颜色：未启动/停止=灰，启动中=绿，已启动=绿，警告=黄，错误=红
+        color_map = {
+            "info": "gray",
+            "stopped": "gray",
+            "starting": "#22c55e",
+            "running": "#22c55e",
+            "warning": "#f59e0b",
+            "error": "#ef4444",
+        }
+        try:
+            status_label.configure(text_color=color_map.get(kind, "gray"))
+        except Exception:
+            pass
+
     ctk.CTkLabel(app, text="状态:").grid(row=row, column=0, pady=8, padx=(pad, 8), sticky="w")
-    ctk.CTkLabel(app, textvariable=status_var).grid(row=row, column=1, pady=8, padx=8, sticky="w")
+    status_label = ctk.CTkLabel(app, textvariable=status_var, text_color="gray")
+    status_label.grid(row=row, column=1, pady=8, padx=8, sticky="w")
     row += 1
 
     btn_frame = ctk.CTkFrame(app, fg_color="transparent")
@@ -315,7 +348,7 @@ def main():
     btn_start.pack(side="left", padx=(0, 12))
     btn_stop = ctk.CTkButton(btn_frame, text="停止服务", width=120, command=on_stop, state="disabled")
     btn_stop.pack(side="left", padx=(0, 12))
-    btn_open = ctk.CTkButton(btn_frame, text="在浏览器中打开", width=120, command=open_browser)
+    btn_open = ctk.CTkButton(btn_frame, text="在浏览器中打开", width=120, command=open_browser, state="disabled")
     btn_open.pack(side="left")
     row += 1
 
@@ -332,6 +365,7 @@ def main():
     app.grid_columnconfigure(3, weight=0, minsize=220)
     refresh_ip()
     update_url()
+    set_status("未启动", kind="stopped")
 
     def on_close():
         # 窗口关闭时也必须停服，避免后台子进程继续占用端口

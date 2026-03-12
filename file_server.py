@@ -23,6 +23,8 @@ from werkzeug.utils import secure_filename
 # SSE：有人上传/删除/新建后通知所有打开页面的客户端刷新列表
 _sse_lock = threading.Lock()
 _sse_queues = []  # 每个元素为 Queue，主线程 put 消息，SSE 生成器 get 后 yield
+_waitress_threads = None  # run_server 设置后用于 SSE 告警
+_sse_warn_state = {"last_ts": 0.0, "last_level": 0}  # 避免刷屏：按等级/时间节流
 
 logger = logging.getLogger("file_share")
 if not logger.handlers:
@@ -160,6 +162,26 @@ def sse_events():
         my_queue = Queue(maxsize=8)
         with _sse_lock:
             _sse_queues.append(my_queue)
+            # SSE 长连接会占用 Waitress 线程；连接数接近线程数时，请求会排队表现为“点了按钮要等几秒”
+            try:
+                if _waitress_threads:
+                    n = len(_sse_queues)
+                    t = int(_waitress_threads)
+                    # 80%/95% 两级告警，并做 30 秒节流
+                    level = 2 if n >= max(1, int(t * 0.95)) else (1 if n >= max(1, int(t * 0.80)) else 0)
+                    now = time.time()
+                    if level > 0 and (level > _sse_warn_state["last_level"] or now - _sse_warn_state["last_ts"] > 30):
+                        _sse_warn_state["last_ts"] = now
+                        _sse_warn_state["last_level"] = level
+                        pct = int((n / max(1, t)) * 100)
+                        logger.warning(
+                            "【性能提醒】当前约有 %s 个页面/标签页在打开（SSE 长连接=%s），已接近服务线程上限（threads=%s，约 %s%%）。"
+                            "此时上传/删除等请求可能出现排队，表现为“点了要等几秒”。"
+                            "建议：减少打开的页面/标签页，或提高线程数（设置环境变量 FILE_SHARE_THREADS，例如 64/128）。",
+                            n, n, t, pct
+                        )
+            except Exception:
+                pass
         try:
             # 握手：先发 retry，再发 connected（带 4KB 填充），触发 Waitress 立即发送
             yield "retry: 8000\n"
@@ -434,6 +456,13 @@ def upload():
     full = (ROOT_DIR / rel).resolve()
     if not str(full).startswith(str(ROOT_DIR.resolve())):
         return jsonify({"error": "非法路径"}), 403
+    # 文件夹上传/保留层级：允许前端传递子目录并让服务端自动创建（仅在明确请求时开启）
+    mkdirs = (request.form.get("mkdirs") or "").strip().lower() in ("1", "true", "yes")
+    if mkdirs and not full.exists():
+        try:
+            full.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            return jsonify({"error": "创建目录失败: " + str(e)}), 500
     if not full.exists() or not full.is_dir():
         return jsonify({"error": "目标目录不存在"}), 400
     if "file" not in request.files:
@@ -441,9 +470,12 @@ def upload():
     f = request.files["file"]
     if not f or f.filename == "":
         return jsonify({"error": "未选择文件"}), 400
-    name = f.filename
-    if "\\" in name or "/" in name or name in (".", ".."):
-        name = secure_filename(f.filename) or "upload"
+    # 某些浏览器/代理在目录上传或拖拽时会把相对路径放在 filename 中（如 sybak\\file.sql），
+    # 这里始终只取最后一级作为文件名，避免出现“文件夹名_文件名.ext”这种不符合用户预期的名称。
+    raw_name = f.filename or ""
+    name = raw_name.rsplit("\\", 1)[-1].rsplit("/", 1)[-1]
+    if name in (".", "..") or not name:
+        name = secure_filename(raw_name) or "upload"
     dest = full / name
     # 同名处理：覆盖 / 自动重命名（否则返回 409 由前端弹窗让用户选）
     if dest.exists():
@@ -740,12 +772,21 @@ def run_server(host: str, port: int, root_dir: str):
     set_root_dir(root_dir)
     try:
         import waitress
+        global _waitress_threads
+        # 默认 32：更适合“多标签页 + SSE 长连接 + 上传/删除”等并发场景
+        # 允许通过环境变量覆盖：FILE_SHARE_THREADS=64
+        try:
+            _waitress_threads = int(os.environ.get("FILE_SHARE_THREADS", "").strip() or "32")
+        except Exception:
+            _waitress_threads = 32
+        if _waitress_threads < 8:
+            _waitress_threads = 8
         # 大 socket 发送/接收缓冲，配合应用层 16MB 缓冲跑满千兆 LAN
         waitress.serve(
             app,
             host=host,
             port=port,
-            threads=8,
+            threads=_waitress_threads,
             channel_timeout=14400,   # 4 小时，支持几十 GB 大文件上传不断开
             max_request_body_size=20 * 1024**3,  # 20GB（默认 1GB 会拒绝 >1G 上传；0 在部分环境可能异常，用明确大值）
             send_bytes=4096,         # 较小以便 SSE 等流式响应及时发出（256KB 会缓冲导致客户端收不到）
