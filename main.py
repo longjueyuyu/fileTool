@@ -18,6 +18,7 @@ if sys.platform == "win32":
         pass
 
 import customtkinter as ctk
+import tkinter as tk
 from pathlib import Path
 from typing import Tuple
 from PIL import Image
@@ -178,14 +179,15 @@ def main():
         url_var.set(f"http://{ip}:{port}/file")
 
     def update_qr():
+        """根据当前访问地址更新二维码。任何 Tk 图像错误都被吞掉，避免影响按钮状态逻辑。"""
         nonlocal qr_ctk_image
         url = url_var.get().strip()
-        if not url:
-            qr_label.configure(image=None, text="无地址")
-            qr_hint_var.set("启动后生成二维码")
-            qr_ctk_image = None
-            return
         try:
+            if not url:
+                qr_label.configure(image=None, text="无地址")
+                qr_hint_var.set("启动后生成二维码")
+                qr_ctk_image = None
+                return
             import qrcode
             qr = qrcode.QRCode(
                 version=None,
@@ -200,9 +202,20 @@ def main():
             qr_ctk_image = ctk.CTkImage(light_image=img, dark_image=img, size=(160, 160))
             qr_label.configure(image=qr_ctk_image, text="")
             qr_hint_var.set("扫码打开访问地址")
+        except tk.TclError:
+            # Tk 内部 image 句柄丢失时不再抛异常，只尽量还原为文字提示
+            try:
+                qr_label.configure(image=None, text="二维码")
+            except Exception:
+                pass
+            qr_hint_var.set("二维码组件已被释放，稍后可重新启动程序生成。")
+            qr_ctk_image = None
         except Exception as e:
-            qr_label.configure(image=None, text="二维码生成失败")
-            qr_hint_var.set(str(e))
+            try:
+                qr_label.configure(image=None, text="二维码生成失败")
+            except Exception:
+                pass
+            qr_hint_var.set(str(e) or "二维码生成失败")
             qr_ctk_image = None
 
     def on_start():
@@ -260,8 +273,12 @@ def main():
                 return
 
             if attempt >= max_attempts:
-                # 进程活着但端口一直不可连：给出明确提示，但不强制判定失败（用户可自行访问验证）
-                set_status("服务进程已启动但端口暂不可连接（请稍后重试，或检查防火墙/端口占用）", kind="warning")
+                # 进程活着但端口一直不可连：视为“服务已启动但网络检测失败”
+                # 为避免界面卡死，仍然允许“在浏览器中打开”按钮可用，让用户自行验证。
+                set_status("服务进程已启动但端口检测暂不可连接（可能是防火墙或网络策略），可尝试在浏览器中直接访问上方地址。", kind="warning")
+                update_url()
+                update_qr()
+                btn_open.configure(state="normal")
                 return
 
             set_status(f"正在启动…({attempt}/{max_attempts})", kind="starting")
@@ -274,8 +291,12 @@ def main():
         stop_server()
         # 端口释放在 Windows 上可能需要极短时间，给一个明确提示
         set_status("已停止（端口已释放）", kind="stopped")
-        qr_label.configure(image=None, text="二维码")
-        qr_hint_var.set("启动后生成二维码")
+        # 停止服务时重置二维码区域；若底层 Tk image 已被销毁，忽略异常，避免打断后续按钮状态恢复逻辑
+        try:
+            qr_label.configure(image=None, text="二维码")
+            qr_hint_var.set("启动后生成二维码")
+        except tk.TclError:
+            pass
         btn_start.configure(state="normal")
         btn_stop.configure(state="disabled")
         entry_port.configure(state="normal")
