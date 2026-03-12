@@ -11,6 +11,7 @@
 - **功能截图**：
   1、启动设置界面
   <img width="918" height="621" alt="image" src="https://github.com/user-attachments/assets/5d0ac42a-ede0-4569-965a-b5be1a730cf3" />
+
   2、访问页面
   <img width="1111" height="779" alt="image" src="https://github.com/user-attachments/assets/ebb0c2d6-44d3-4780-b152-c88d49724433" />
 
