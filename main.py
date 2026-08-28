@@ -21,7 +21,7 @@ import customtkinter as ctk
 import tkinter as tk
 from pathlib import Path
 from typing import Tuple
-from PIL import Image
+from PIL import Image, ImageDraw, ImageTk
 
 _server_process = None
 _log_file_path = None
@@ -161,7 +161,10 @@ def main():
     url_var = ctk.StringVar(value="")
     qr_hint_var = ctk.StringVar(value="启动后生成二维码")
 
-    qr_ctk_image = None  # 保持引用，避免被回收导致不显示
+    qr_photo_image = None  # 保持引用，避免被回收导致不显示
+    start_session_id = 0
+    pending_verify_after_id = None
+    pending_qr_after_ids = []
 
     def refresh_ip():
         ip_var.set(get_local_ip())
@@ -178,29 +181,59 @@ def main():
         port = port_var.get().strip() or "81"
         url_var.set(f"http://{ip}:{port}/file")
 
+    def _render_qr_image(url: str, size: int = 160) -> Image.Image:
+        """
+        用 qrcode 生成矩阵，再用 PIL 直接绘制。
+        这样即使打包环境里 qrcode 的图片工厂子模块不完整，也能稳定出图。
+        """
+        import qrcode
+
+        qr = qrcode.QRCode(
+            version=None,
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            box_size=10,
+            border=2,
+        )
+        qr.add_data(url)
+        qr.make(fit=True)
+        matrix = qr.get_matrix()
+
+        modules = len(matrix)
+        if modules <= 0:
+            raise ValueError("二维码矩阵为空")
+
+        margin = 8
+        usable = max(1, size - margin * 2)
+        scale = max(1, usable // modules)
+        image_size = modules * scale + margin * 2
+
+        img = Image.new("RGB", (image_size, image_size), "white")
+        draw = ImageDraw.Draw(img)
+        for y, row in enumerate(matrix):
+            for x, cell in enumerate(row):
+                if cell:
+                    x0 = margin + x * scale
+                    y0 = margin + y * scale
+                    draw.rectangle((x0, y0, x0 + scale - 1, y0 + scale - 1), fill="black")
+
+        if image_size != size:
+            img = img.resize((size, size), Image.Resampling.NEAREST)
+        return img
+
     def update_qr():
         """根据当前访问地址更新二维码。任何 Tk 图像错误都被吞掉，避免影响按钮状态逻辑。"""
-        nonlocal qr_ctk_image
+        nonlocal qr_photo_image
         url = url_var.get().strip()
         try:
             if not url:
                 qr_label.configure(image=None, text="无地址")
                 qr_hint_var.set("启动后生成二维码")
-                qr_ctk_image = None
+                qr_photo_image = None
                 return
-            import qrcode
-            qr = qrcode.QRCode(
-                version=None,
-                error_correction=qrcode.constants.ERROR_CORRECT_M,
-                box_size=6,
-                border=2,
-            )
-            qr.add_data(url)
-            qr.make(fit=True)
-            img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
-            img = img.resize((160, 160), Image.Resampling.LANCZOS)
-            qr_ctk_image = ctk.CTkImage(light_image=img, dark_image=img, size=(160, 160))
-            qr_label.configure(image=qr_ctk_image, text="")
+            img = _render_qr_image(url, 160)
+            qr_photo_image = ImageTk.PhotoImage(img, master=app)
+            qr_label.configure(image=qr_photo_image, text="")
+            qr_label.image = qr_photo_image
             qr_hint_var.set("扫码打开访问地址")
         except tk.TclError:
             # Tk 内部 image 句柄丢失时不再抛异常，只尽量还原为文字提示
@@ -209,16 +242,17 @@ def main():
             except Exception:
                 pass
             qr_hint_var.set("二维码组件已被释放，稍后可重新启动程序生成。")
-            qr_ctk_image = None
+            qr_photo_image = None
         except Exception as e:
             try:
                 qr_label.configure(image=None, text="二维码生成失败")
             except Exception:
                 pass
             qr_hint_var.set(str(e) or "二维码生成失败")
-            qr_ctk_image = None
+            qr_photo_image = None
 
     def on_start():
+        nonlocal start_session_id, pending_verify_after_id
         root_dir = folder_var.get()
         if root_dir == "未选择文件夹" or not root_dir:
             status_var.set("请先选择文件夹")
@@ -241,6 +275,10 @@ def main():
         if not ok:
             status_var.set(err or "启动失败")
             return
+        start_session_id += 1
+        session_id = start_session_id
+        refresh_ip()
+        update_url()
         set_status("正在启动…", kind="starting")
         btn_start.configure(state="disabled")
         btn_stop.configure(state="normal")
@@ -248,7 +286,29 @@ def main():
         btn_folder.configure(state="disabled")
         btn_open.configure(state="disabled")
 
+        if pending_verify_after_id is not None:
+            try:
+                app.after_cancel(pending_verify_after_id)
+            except Exception:
+                pass
+            pending_verify_after_id = None
+        for after_id in pending_qr_after_ids:
+            try:
+                app.after_cancel(after_id)
+            except Exception:
+                pass
+        pending_qr_after_ids.clear()
+
+        def schedule_qr_refresh():
+            nonlocal pending_qr_after_ids
+            for delay in (0, 250):
+                after_id = app.after(delay, update_qr)
+                pending_qr_after_ids.append(after_id)
+
         def verify_started(attempt: int = 1, max_attempts: int = 18):
+            nonlocal pending_verify_after_id
+            if session_id != start_session_id:
+                return
             global _server_process
             alive, msg = check_server_started(port)
             if not alive:
@@ -268,7 +328,7 @@ def main():
             if ok_local or ok_lan:
                 set_status("服务已启动", kind="running")
                 update_url()
-                update_qr()
+                schedule_qr_refresh()
                 btn_open.configure(state="normal")
                 return
 
@@ -277,24 +337,40 @@ def main():
                 # 为避免界面卡死，仍然允许“在浏览器中打开”按钮可用，让用户自行验证。
                 set_status("服务进程已启动但端口检测暂不可连接（可能是防火墙或网络策略），可尝试在浏览器中直接访问上方地址。", kind="warning")
                 update_url()
-                update_qr()
+                schedule_qr_refresh()
                 btn_open.configure(state="normal")
                 return
 
             set_status(f"正在启动…({attempt}/{max_attempts})", kind="starting")
-            app.after(350, lambda: verify_started(attempt + 1, max_attempts))
+            pending_verify_after_id = app.after(350, lambda: verify_started(attempt + 1, max_attempts))
             return
 
-        app.after(350, lambda: verify_started(1, 18))
+        pending_verify_after_id = app.after(350, lambda: verify_started(1, 18))
 
     def on_stop():
+        nonlocal qr_photo_image, start_session_id, pending_verify_after_id
         stop_server()
+        start_session_id += 1
+        if pending_verify_after_id is not None:
+            try:
+                app.after_cancel(pending_verify_after_id)
+            except Exception:
+                pass
+            pending_verify_after_id = None
+        for after_id in pending_qr_after_ids:
+            try:
+                app.after_cancel(after_id)
+            except Exception:
+                pass
+        pending_qr_after_ids.clear()
         # 端口释放在 Windows 上可能需要极短时间，给一个明确提示
         set_status("已停止（端口已释放）", kind="stopped")
         # 停止服务时重置二维码区域；若底层 Tk image 已被销毁，忽略异常，避免打断后续按钮状态恢复逻辑
         try:
             qr_label.configure(image=None, text="二维码")
             qr_hint_var.set("启动后生成二维码")
+            qr_label.image = None
+            qr_photo_image = None
         except tk.TclError:
             pass
         btn_start.configure(state="normal")
@@ -325,7 +401,10 @@ def main():
     qr_frame.grid(row=row, column=3, rowspan=6, padx=(0, pad), pady=8, sticky="nsew")
     qr_title = ctk.CTkLabel(qr_frame, text="扫码访问", font=ctk.CTkFont(size=14, weight="bold"))
     qr_title.pack(pady=(12, 6), padx=12)
-    qr_label = ctk.CTkLabel(qr_frame, text="二维码", width=160, height=160)
+    qr_bg = qr_frame.cget("fg_color")
+    if isinstance(qr_bg, (list, tuple)) and len(qr_bg) >= 2:
+        qr_bg = qr_bg[1 if ctk.get_appearance_mode().lower() == "dark" else 0]
+    qr_label = tk.Label(qr_frame, text="二维码", bg=qr_bg, fg="white", bd=0, highlightthickness=0)
     qr_label.pack(pady=(6, 6), padx=12)
     qr_hint = ctk.CTkLabel(qr_frame, textvariable=qr_hint_var, text_color="gray", wraplength=180, justify="center")
     qr_hint.pack(pady=(0, 12), padx=12)

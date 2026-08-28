@@ -1112,16 +1112,24 @@
     const modalHint = document.getElementById('previewHint');
     const modalClose = document.getElementById('previewClose');
     const modalDownload = document.getElementById('previewDownload');
+    let lastPreviewTrigger = null;
 
     function closePreview() {
-      // 先解除媒体/iframe 对预览 URL 的占用，使浏览器断开请求，服务端才能释放文件句柄（避免 Windows 删除时报“文件被占用”）
-      modalBody.querySelectorAll('video, audio, img, iframe').forEach(function(el) {
+      const active = document.activeElement;
+      if (active && modal.contains(active) && typeof active.blur === 'function') {
+        active.blur();
+      }
+      // 先解除媒体/iframe/object 对预览 URL 的占用，使浏览器断开请求，服务端才能释放文件句柄（避免 Windows 删除时报“文件被占用”）
+      modalBody.querySelectorAll('video, audio, img, iframe, object').forEach(function(el) {
         if (el.tagName === 'IFRAME') el.src = 'about:blank';
         else { el.pause && el.pause(); el.removeAttribute('src'); el.load && el.load(); }
       });
       modal.classList.remove('open');
       modal.setAttribute('aria-hidden', 'true');
       modalBody.innerHTML = '<div class="muted" id="previewHint">已关闭</div>';
+      if (lastPreviewTrigger && typeof lastPreviewTrigger.focus === 'function') {
+        try { lastPreviewTrigger.focus(); } catch (e) {}
+      }
     }
 
     modalClose.addEventListener('click', closePreview);
@@ -1129,6 +1137,7 @@
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modal.classList.contains('open')) closePreview(); });
 
     async function openPreview(file) {
+      lastPreviewTrigger = document.activeElement;
       const name = maybeDecodeURIComponent(file.name || '');
       const pathEnc = file.path || '';
       modalTitle.textContent = name || '预览';
@@ -1166,7 +1175,8 @@
         const v = document.createElement('video');
         v.className = 'preview-media';
         v.controls = true;
-        v.preload = 'metadata';
+        v.preload = 'auto';
+        v.playsInline = true;
         v.src = base + '/api/preview/' + pathEnc;
         const hint = document.createElement('div');
         hint.className = 'muted';
@@ -1189,50 +1199,23 @@
         return;
       }
 
-      // PDF：优先尝试前端渲染（pdf.js），否则降级 iframe
+      // PDF：优先走浏览器原生内嵌预览；不支持时提示下载
       if (ext === 'pdf') {
         const url = base + '/api/preview/' + pathEnc;
-        // 若能加载 pdf.js，则渲染第一页（快速预览），并提供下载
-        try {
-          if (!window.pdfjsLib) {
-            await new Promise((resolve, reject) => {
-              const s = document.createElement('script');
-              s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.js';
-              s.onload = resolve;
-              s.onerror = reject;
-              document.head.appendChild(s);
-            });
-          }
-          if (window.pdfjsLib) {
-            window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.js';
-            const pdf = await window.pdfjsLib.getDocument(url).promise;
-            const page = await pdf.getPage(1);
-            const viewport = page.getViewport({ scale: 1.3 });
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            canvas.width = viewport.width;
-            canvas.height = viewport.height;
-            modalBody.innerHTML = '';
-            modalBody.appendChild(canvas);
-            await page.render({ canvasContext: ctx, viewport }).promise;
-            const tip = document.createElement('div');
-            tip.className = 'muted';
-            tip.style.marginTop = '10px';
-            tip.textContent = `PDF 共 ${pdf.numPages} 页（当前渲染第 1 页）`;
-            modalBody.appendChild(tip);
-            return;
-          }
-        } catch (e) {
-          // ignore, fallback
-        }
-        const iframe = document.createElement('iframe');
-        iframe.src = url;
-        iframe.style.width = '100%';
-        iframe.style.height = '520px';
-        iframe.style.border = '1px solid var(--border)';
-        iframe.style.borderRadius = '12px';
+        const objectEl = document.createElement('object');
+        objectEl.data = url;
+        objectEl.type = 'application/pdf';
+        objectEl.style.width = '100%';
+        objectEl.style.height = '520px';
+        objectEl.style.border = '1px solid var(--border)';
+        objectEl.style.borderRadius = '12px';
+        const fallback = document.createElement('div');
+        fallback.className = 'muted';
+        fallback.style.padding = '18px';
+        fallback.innerHTML = '当前浏览器无法直接预览 PDF，请点击右上角“下载”打开。';
+        objectEl.appendChild(fallback);
         modalBody.innerHTML = '';
-        modalBody.appendChild(iframe);
+        modalBody.appendChild(objectEl);
         return;
       }
 

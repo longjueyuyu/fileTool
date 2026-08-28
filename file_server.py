@@ -349,7 +349,7 @@ def _content_disposition(disp: str, filename: str) -> str:
     return f'{disp}; filename="{safe_ascii}"; filename*=UTF-8\'\'{url_quote(filename, safe="")}'
 
 
-def _send_file_with_range(full: Path, disp: str):
+def _send_file_with_range(full: Path, disp: str, include_disposition: bool = True):
     """发送文件，支持 Range（单段/多段），用于视频拖拽进度等场景；大缓冲区以跑满局域网带宽。"""
     size = full.stat().st_size
     range_header = request.headers.get("Range") or ""
@@ -360,7 +360,8 @@ def _send_file_with_range(full: Path, disp: str):
         res.headers["Content-Range"] = f"bytes */{size}"
         res.headers["Accept-Ranges"] = "bytes"
         res.headers["Content-Type"] = _content_type_for(full)
-        res.headers["Content-Disposition"] = _content_disposition(disp, full.name)
+        if include_disposition:
+            res.headers["Content-Disposition"] = _content_disposition(disp, full.name)
         return res
 
     if range_spec is None:
@@ -393,7 +394,8 @@ def _send_file_with_range(full: Path, disp: str):
         res = Response(generate_multi(), direct_passthrough=True, status=206)
         res.headers["Accept-Ranges"] = "bytes"
         res.headers["Content-Type"] = f"multipart/byteranges; boundary={boundary}"
-        res.headers["Content-Disposition"] = _content_disposition(disp, full.name)
+        if include_disposition:
+            res.headers["Content-Disposition"] = _content_disposition(disp, full.name)
         return res
     else:
         start, end = range_spec
@@ -415,7 +417,8 @@ def _send_file_with_range(full: Path, disp: str):
     res = Response(generate(), direct_passthrough=True, status=status)
     res.headers["Accept-Ranges"] = "bytes"
     res.headers["Content-Type"] = _content_type_for(full)
-    res.headers["Content-Disposition"] = _content_disposition(disp, full.name)
+    if include_disposition:
+        res.headers["Content-Disposition"] = _content_disposition(disp, full.name)
     res.headers["Content-Length"] = str(content_length)
     if status == 206:
         res.headers["Content-Range"] = f"bytes {start}-{end}/{size}"
@@ -443,7 +446,7 @@ def preview(subpath):
     full = (ROOT_DIR / rel).resolve()
     if not str(full).startswith(str(ROOT_DIR.resolve())) or not full.is_file():
         abort(404)
-    return _send_file_with_range(full, disp="inline")
+    return _send_file_with_range(full, disp="inline", include_disposition=False)
 
 
 @app.route("/file/api/upload", methods=["POST"])
